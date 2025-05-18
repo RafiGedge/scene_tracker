@@ -8,7 +8,7 @@ const objectIcons = {
         size: [30, 30]
     },
     Shooting: {
-        icon: '🎯', // Target/shooting icon
+        icon: '🚀', // Target/shooting icon
         color: '#DC143C', // Crimson red
         size: [25, 25]
     },
