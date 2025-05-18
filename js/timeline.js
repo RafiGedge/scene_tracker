@@ -32,6 +32,23 @@ function updateTimeline() {
     updateFrameList();
 }
 
+// Skip timeline backward or forward by specified seconds
+function skipTimeline(secondsToSkip) {
+    const slider = document.getElementById('timeline-slider');
+    const currentValue = parseInt(slider.value);
+    const maxValue = parseInt(slider.max);
+    
+    // Calculate new value, ensuring it stays within range
+    let newValue = currentValue + secondsToSkip;
+    newValue = Math.max(0, Math.min(newValue, maxValue));
+    
+    // Update slider and timeline
+    slider.value = newValue;
+    updateTimeline();
+    
+    console.log(`Timeline skipped by ${secondsToSkip} seconds to ${newValue}s`);
+}
+
 // Play/pause timeline with corrected speed calculation
 function playPause() {
     // Stop any existing playback

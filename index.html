@@ -89,26 +89,30 @@
         </div>
     </div>
 
-    <div id="timeline-container">
-        <div style="display: flex; align-items: center;">
-            <span>Timeline:</span>
-            <span id="current-time">00:00:00</span>
-        </div>
+<div id="timeline-container">
+    <div style="display: flex; align-items: center;">
+        <span>Timeline:</span>
+        <span id="current-time">00:00:00</span>
+    </div>
+    <div class="timeline-slider-container">
+        <button class="button small" onclick="skipTimeline(-10)">◀ 10s</button>
         <input type="range" id="timeline-slider" min="0" max="3600" value="0" step="1">
-        <div class="timeline-controls">
-            <button class="button" onclick="playPause()">Play</button>
-            <button class="button" onclick="resetTimeline()">Reset</button>
-            <div class="speed-control">
-                Speed: 
-                <select id="playback-speed">
-                    <option value="1">1x</option>
-                    <option value="2">2x</option>
-                    <option value="5">5x</option>
-                    <option value="10">10x</option>
-                </select>
-            </div>
+        <button class="button small" onclick="skipTimeline(10)">10s ▶</button>
+    </div>
+    <div class="timeline-controls">
+        <button class="button" onclick="playPause()">Play</button>
+        <button class="button" onclick="resetTimeline()">Reset</button>
+        <div class="speed-control">
+            Speed: 
+            <select id="playback-speed">
+                <option value="1">1x</option>
+                <option value="2">2x</option>
+                <option value="5">5x</option>
+                <option value="10">10x</option>
+            </select>
         </div>
     </div>
+</div>
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
