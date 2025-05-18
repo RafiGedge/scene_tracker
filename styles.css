@@ -169,3 +169,19 @@ input[type="file"] {
     #sidebar { width: 250px; }
     .object-type-tabs { font-size: 11px; }
 }
+
+input[type="date"], 
+input[type="time"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: Arial, sans-serif;
+}
+
+/* Make sure the calendar and time picker icons are visible */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
+}

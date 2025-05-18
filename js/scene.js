@@ -5,11 +5,33 @@ function createNewScene() {
     if (hasExistingScene) {
         if (confirm('Creating a new scene will clear all current data. Are you sure you want to continue?')) {
             clearExistingScene();
+            setupDateTimePickers();
             document.getElementById('setup-modal').classList.remove('hidden');
         }
     } else {
+        setupDateTimePickers();
         document.getElementById('setup-modal').classList.remove('hidden');
     }
+}
+
+// Set up date and time pickers with current date and time
+function setupDateTimePickers() {
+    const now = new Date();
+    
+    // Format date as YYYY-MM-DD for the date input
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const formattedDate = `${year}-${month}-${day}`;
+    
+    // Format time as HH:MM for the time input
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const formattedTime = `${hours}:${minutes}`;
+    
+    // Set the values
+    document.getElementById('start-date').value = formattedDate;
+    document.getElementById('start-time').value = formattedTime;
 }
 
 // Clear existing scene
@@ -90,7 +112,25 @@ async function initializeScene() {
         const centerLon = parseFloat(document.getElementById('center-lon').value);
         const radius = parseInt(document.getElementById('radius').value);
         const duration = parseInt(document.getElementById('duration').value);
-        const now = Math.floor(Date.now() / 1000);
+        
+        // Get selected date and time
+        const startDate = document.getElementById('start-date').value;
+        const startTime = document.getElementById('start-time').value;
+        
+        // Convert to timestamp
+        let startTimestamp;
+        if (startDate && startTime) {
+            // Create a Date object from the selected date and time
+            const dateTimeString = `${startDate}T${startTime}:00`;
+            const selectedDateTime = new Date(dateTimeString);
+            startTimestamp = Math.floor(selectedDateTime.getTime() / 1000);
+            console.log(`Using selected date/time: ${selectedDateTime.toString()}, timestamp: ${startTimestamp}`);
+        } else {
+            // Fallback to current time if date/time not selected
+            startTimestamp = Math.floor(Date.now() / 1000);
+            console.log(`Using current time as timestamp: ${startTimestamp}`);
+        }
+        
         const utmCoords = latLonToUTM(centerLat, centerLon);
 
         scene = {
@@ -101,8 +141,8 @@ async function initializeScene() {
             center_y: utmCoords.y,
             utm_zone: utmCoords.zone,
             radius_meters: radius,
-            start_timestamp: now,
-            end_timestamp: now + (duration * 60),
+            start_timestamp: startTimestamp,
+            end_timestamp: startTimestamp + (duration * 60),
             created_at: new Date().toISOString()
         };
 

@@ -8,33 +8,44 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="setup-modal" class="hidden">
-        <div id="setup-modal-content">
-            <h2>Scene Setup</h2>
-            <div class="form-group">
-                <label for="scene-name">Scene Name:</label>
-                <input type="text" id="scene-name" value="training_ground_01">
-            </div>
-            <div class="form-group">
-                <label for="center-lat">Center Latitude:</label>
-                <input type="number" id="center-lat" step="0.0001" value="32.0853">
-            </div>
-            <div class="form-group">
-                <label for="center-lon">Center Longitude:</label>
-                <input type="number" id="center-lon" step="0.0001" value="34.7818">
-            </div>
-            <div class="form-group">
-                <label for="radius">Radius (meters):</label>
-                <input type="number" id="radius" value="200">
-            </div>
-            <div class="form-group">
-                <label for="duration">Duration (minutes):</label>
-                <input type="number" id="duration" value="1">
-            </div>
-            <button class="button" onclick="initializeScene()">Initialize Scene</button>
-            <div id="init-status"></div>
+<div id="setup-modal" class="hidden">
+    <div id="setup-modal-content">
+        <h2>Scene Setup</h2>
+        <div class="form-group">
+            <label for="scene-name">Scene Name:</label>
+            <input type="text" id="scene-name" value="training_ground_01">
         </div>
+        <div class="form-group">
+            <label for="center-lat">Center Latitude:</label>
+            <input type="number" id="center-lat" step="0.0001" value="32.0853">
+        </div>
+        <div class="form-group">
+            <label for="center-lon">Center Longitude:</label>
+            <input type="number" id="center-lon" step="0.0001" value="34.7818">
+        </div>
+        <div class="form-group">
+            <label for="radius">Radius (meters):</label>
+            <input type="number" id="radius" value="200">
+        </div>
+        <div class="form-group">
+            <label for="duration">Duration (minutes):</label>
+            <input type="number" id="duration" value="1">
+        </div>
+        
+        <!-- New Date/Time Picker -->
+        <div class="form-group">
+            <label for="start-date">Start Date:</label>
+            <input type="date" id="start-date">
+        </div>
+        <div class="form-group">
+            <label for="start-time">Start Time:</label>
+            <input type="time" id="start-time">
+        </div>
+        
+        <button class="button" onclick="initializeScene()">Initialize Scene</button>
+        <div id="init-status"></div>
     </div>
+</div>
 
     <div id="header">
         <button class="button" onclick="createNewScene()">New Scene</button>
