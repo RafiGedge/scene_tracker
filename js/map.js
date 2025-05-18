@@ -8,7 +8,7 @@ const objectIcons = {
         size: [30, 30]
     },
     Shooting: {
-        icon: '🚀', // Target/shooting icon
+        icon: '🎯', // Target/shooting icon
         color: '#DC143C', // Crimson red
         size: [25, 25]
     },
@@ -90,53 +90,22 @@ function createSelectedIcon(objectType) {
     });
 }
 
-// Setup map and scene
-function setupMapAndScene(centerLat, centerLon, radius, duration) {
-    if (map) map.remove();
-    map = L.map('map').setView([centerLat, centerLon], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-
-    // Add scene boundary circle
-    L.circle([centerLat, centerLon], {
-        color: 'blue',
-        fillColor: '#30f',
-        fillOpacity: 0.1,
-        radius: radius
-    }).addTo(map);
-
-    // NOTE: Buildings and roads are fetched and saved to CSV, 
-    // but they are NOT rendered on the map as per requirements
-
-    const timelineSlider = document.getElementById('timeline-slider');
-    timelineSlider.min = 0;
-    timelineSlider.max = duration * 60;
-    timelineSlider.value = 0;
-    currentTimestamp = 0;
-
-    document.getElementById('scene-info').textContent = `Scene: ${scene.scene_name} | Duration: ${duration} min`;
-
-    hasExistingScene = true;
-    map.on('click', handleMapClick);
-    updateMapDisplay();
-    updateObjectsList();
-}
-
-// Draw line between Ground object and Shooting object only
-function drawGroundShootingConnection(obj, currentPos) {
-    // Use the original ground position
-    if (obj.original_ground_x && obj.original_ground_y) {
-        const originalGroundPos = {
-            x: obj.original_ground_x,
-            y: obj.original_ground_y
+// Draw line between launch and target positions for Shooting objects
+function drawShootingLine(obj, currentPos) {
+    // Only draw if we have launch coordinates
+    if (obj.launch_location_x && obj.launch_location_y && 
+        obj.launch_location_x !== 'None' && obj.launch_location_y !== 'None') {
+        
+        const launchPos = {
+            x: parseFloat(obj.launch_location_x),
+            y: parseFloat(obj.launch_location_y)
         };
         
-        const groundLatLon = utmToLatLon(originalGroundPos.x, originalGroundPos.y, scene.utm_zone);
-        const currentLatLon = utmToLatLon(currentPos.x, currentPos.y, scene.utm_zone);
+        const launchLatLon = utmToLatLon(launchPos.x, launchPos.y, scene.utm_zone);
+        const targetLatLon = utmToLatLon(currentPos.x, currentPos.y, scene.utm_zone);
         
         // Orange dashed line for Shooting objects
-        const connectionLine = L.polyline([groundLatLon, currentLatLon], {
+        const connectionLine = L.polyline([launchLatLon, targetLatLon], {
             color: '#FFA500',  // Orange
             weight: 2,
             opacity: 0.7,
@@ -144,20 +113,19 @@ function drawGroundShootingConnection(obj, currentPos) {
         }).addTo(map);
         currentMarkers.push(connectionLine);
         
-        // Add a small marker at the original ground position
-        const originalPosMarker = L.circleMarker(groundLatLon, {
+        // Add a small marker at the launch position
+        const launchPosMarker = L.circleMarker(launchLatLon, {
             radius: 4,
             color: '#FFA500',
             fillColor: '#FFA500',
             fillOpacity: 0.5
         }).addTo(map);
-        originalPosMarker.bindTooltip("Original Ground Position");
-        currentMarkers.push(originalPosMarker);
+        launchPosMarker.bindTooltip("Launch Position");
+        currentMarkers.push(launchPosMarker);
     }
 }
 
-
-// Update map display for current timestamp - No dash lines for Report and EnemySpot
+// Update map display for current timestamp
 function updateMapDisplay() {
     if (!map) return;
     
@@ -169,6 +137,12 @@ function updateMapDisplay() {
     
     for (const [objectType, objectsOfType] of Object.entries(objects)) {
         for (const [objectId, obj] of Object.entries(objectsOfType)) {
+            // Skip rendering for Shooting objects with target coordinates
+            // These will be rendered specially below
+            if (objectType === 'Shooting') {
+                continue;
+            }
+            
             const position = getObjectPositionAtTime(obj, currentTime);
             if (!position) continue;
             
@@ -189,7 +163,7 @@ function updateMapDisplay() {
             `;
             
             // Special popup content for objects with Ground association
-            if ((objectType === 'Shooting' || objectType === 'EnemySpot' || objectType === 'Report') && obj.associated_ground_id) {
+            if ((objectType === 'EnemySpot' || objectType === 'Report') && obj.associated_ground_id) {
                 const groundObj = objects.Ground[obj.associated_ground_id];
                 if (groundObj) {
                     popupContent += `<hr style="margin: 5px 0;"><small>Associated with: ${groundObj.callsign}</small>`;
@@ -208,92 +182,77 @@ function updateMapDisplay() {
                 marker.dragging.enable();
                 marker.on('dragend', (e) => updateObjectPosition(objectType, objectId, e.target.getLatLng()));
             }
-            
-            // Draw connection lines ONLY for Shooting objects (not EnemySpot or Report)
-            if (objectType === 'Shooting' && 
-                obj.associated_ground_id && obj.original_ground_x && obj.original_ground_y) {
+        }
+    }
+    
+    // Handle Shooting objects separately
+    for (const [objectId, obj] of Object.entries(objects.Shooting || {})) {
+        // Only display Shooting objects with valid target coordinates
+        if (!obj.target_x || !obj.target_y) continue;
+        
+        // Convert target coordinates to lat/lon
+        const targetLatLon = utmToLatLon(parseFloat(obj.target_x), parseFloat(obj.target_y), scene.utm_zone);
+        
+        // Create marker at the target position
+        const targetMarker = L.marker([targetLatLon.lat, targetLatLon.lon], {
+            icon: createCustomIcon('Shooting')
+        });
+        
+        // Add popup with styled content
+        let popupContent = `
+            <div style="text-align: center;">
+                <strong>Shooting</strong><br>
+                ${obj.ground_callsign || 'Unknown'}<br>
+                <small>Target X: ${parseFloat(obj.target_x).toFixed(1)}, Y: ${parseFloat(obj.target_y).toFixed(1)}</small>
+            </div>
+        `;
+        
+        // Add Ground association info if available
+        if (obj.associated_ground_id) {
+            const groundObj = objects.Ground[obj.associated_ground_id];
+            if (groundObj) {
+                popupContent += `<hr style="margin: 5px 0;"><small>Associated with: ${groundObj.callsign}</small>`;
+            }
+        }
+        
+        targetMarker.bindPopup(popupContent);
+        targetMarker.on('click', () => selectObject('Shooting', objectId));
+        targetMarker.addTo(map);
+        currentMarkers.push(targetMarker);
+        
+        // Enable dragging for selected objects
+        if (selectedObject && selectedObject.type === 'Shooting' && selectedObject.id === objectId) {
+            // Add selection indicator
+            targetMarker.setIcon(createSelectedIcon('Shooting'));
+            targetMarker.dragging.enable();
+            targetMarker.on('dragend', (e) => {
+                const latLng = e.target.getLatLng();
+                const utmCoords = latLonToUTM(latLng.lat, latLng.lng);
                 
-                // Only draw connection line for Shooting objects
-                drawGroundShootingConnection(obj, position);
-            }
+                // Save to undo stack
+                undoStack.push({
+                    action: 'updateProperty',
+                    objectType: 'Shooting',
+                    objectId: objectId,
+                    key: 'target_x',
+                    oldValue: obj.target_x,
+                    newValue: utmCoords.x
+                });
+                
+                // Update the target coordinates
+                obj.target_x = utmCoords.x;
+                obj.target_y = utmCoords.y;
+                updateObjectProperties();
+                updateMapDisplay();
+            });
         }
+        
+        // Draw the line from launch to target
+        drawShootingLine(obj, { x: parseFloat(obj.target_x), y: parseFloat(obj.target_y) });
     }
 }
 
-// Draw line between Ground object and any associated object - Using original position
-function drawGroundConnection(obj, currentPos, objectType) {
-    // Use the original ground position
-    if (obj.original_ground_x && obj.original_ground_y) {
-        const originalGroundPos = {
-            x: obj.original_ground_x,
-            y: obj.original_ground_y
-        };
-        
-        const groundLatLon = utmToLatLon(originalGroundPos.x, originalGroundPos.y, scene.utm_zone);
-        const currentLatLon = utmToLatLon(currentPos.x, currentPos.y, scene.utm_zone);
-        
-        // Different line styles by object type
-        let lineStyle = {
-            color: '#FFA500',  // Default: orange
-            weight: 2,
-            opacity: 0.7,
-            dashArray: '5, 5'  // Default: dashed line
-        };
-        
-        // Customize line by object type
-        if (objectType === 'EnemySpot') {
-            lineStyle.color = '#FF8C00';  // Dark orange
-            lineStyle.dashArray = '3, 7';  // Different dash pattern
-        } else if (objectType === 'Report') {
-            lineStyle.color = '#4169E1';  // Royal blue
-            lineStyle.dashArray = '2, 4';  // Different dash pattern
-        }
-        
-        // Line from original Ground position to current position
-        const connectionLine = L.polyline([groundLatLon, currentLatLon], lineStyle).addTo(map);
-        currentMarkers.push(connectionLine);
-        
-        // Add a small marker at the original ground position
-        const originalPosMarker = L.circleMarker(groundLatLon, {
-            radius: 4,
-            color: lineStyle.color,
-            fillColor: lineStyle.color,
-            fillOpacity: 0.5
-        }).addTo(map);
-        originalPosMarker.bindTooltip("Original Ground Position");
-        currentMarkers.push(originalPosMarker);
-    }
-}
-
-// Update Shooting object when associated Ground moves
-function updateShootingAssociations(groundId) {
-    const currentTime = scene.start_timestamp + currentTimestamp;
-    const groundObj = objects.Ground[groundId];
-    if (!groundObj) return;
-    
-    const groundPosition = getObjectPositionAtTime(groundObj, currentTime);
-    
-    // Update all Shooting objects associated with this Ground object
-    for (const [shootingId, shootingObj] of Object.entries(objects.Shooting || {})) {
-        if (shootingObj.associated_ground_id === groundId) {
-            if (groundPosition && isPositionInScene(groundPosition.x, groundPosition.y)) {
-                shootingObj.launch_location_x = groundPosition.x;
-                shootingObj.launch_location_y = groundPosition.y;
-                shootingObj.ground_callsign = groundObj.callsign || 'Unknown';
-            } else {
-                shootingObj.launch_location_x = 'None';
-                shootingObj.launch_location_y = 'None';
-            }
-        }
-    }
-    
-    // Update the display if a Shooting object is currently selected
-    if (selectedObject && selectedObject.type === 'Shooting') {
-        updateObjectProperties();
-    }
-}
-
-// Handle map click for object placement - With additional associations
+// Handle map click for object placement
 function handleMapClick(e) {
     if (!addingObject) return;
     
@@ -320,32 +279,31 @@ function handleMapClick(e) {
             newObject.callsign = 'Unit-' + (Object.keys(objects.Ground).length + 1);
             break;
         case 'Shooting':
+            // Simplified Shooting object with only target coordinates (initially)
+            newObject.target_x = utmCoords.x;
+            newObject.target_y = utmCoords.y;
             newObject.launch_location_x = 'None';
             newObject.launch_location_y = 'None';
-            newObject.target_x = utmCoords.x + 100;
-            newObject.target_y = utmCoords.y + 100;
             newObject.ammo_type = 'standard';
             newObject.associated_ground_id = null;
             newObject.ground_callsign = '';
-            newObject.original_ground_x = null;
-            newObject.original_ground_y = null;
             newObject.timestamp = scene.start_timestamp + currentTimestamp;
+            // Remove frames as Shooting objects don't move
+            delete newObject.frames;
+            delete newObject.x;
+            delete newObject.y;
             break;
         case 'EnemySpot':
             newObject.desc = 'Enemy spotted';
             newObject.callsign = 'Observer-' + (Object.keys(objects.EnemySpot).length + 1);
             newObject.associated_ground_id = null;
             newObject.ground_callsign = '';
-            newObject.original_ground_x = null;
-            newObject.original_ground_y = null;
             break;
         case 'Report':
             newObject.desc = 'Report description';
             newObject.callsign = 'Reporter-' + (Object.keys(objects.Report).length + 1);
             newObject.associated_ground_id = null;
             newObject.ground_callsign = '';
-            newObject.original_ground_x = null;
-            newObject.original_ground_y = null;
             break;
         case 'Targets':
             newObject.creation_time = scene.start_timestamp + currentTimestamp;
@@ -373,67 +331,4 @@ function handleMapClick(e) {
     updateObjectsList();
     updateObjectProperties();
     updateFrameList();
-}
-
-// Fetch building and road data from OpenStreetMap
-// This data is saved to CSV files but NOT rendered on the map
-async function fetchMapData(centerLat, centerLon, radius) {
-    try {
-        const overpassQuery = `
-            [out:json][timeout:25];
-            (
-                way["building"](around:${radius},${centerLat},${centerLon});
-                way["highway"](around:${radius},${centerLat},${centerLon});
-            );
-            (._;>;);
-            out geom;
-        `;
-        
-        const response = await fetch('https://overpass-api.de/api/interpreter', {
-            method: 'POST',
-            body: 'data=' + encodeURIComponent(overpassQuery)
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to fetch map data');
-        }
-        
-        const data = await response.json();
-        
-        // Process buildings and roads for CSV export only
-        buildings = [];
-        roads = [];
-        
-        data.elements.forEach(element => {
-            if (element.type === 'way' && element.geometry && element.geometry.length > 1) {
-                const utmPoints = element.geometry.map(point => {
-                    const utm = latLonToUTM(point.lat, point.lon);
-                    return { x: utm.x, y: utm.y };
-                });
-                
-                if (element.tags && element.tags.building) {
-                    buildings.push({
-                        id: generateUUID(),
-                        type: element.tags.building || 'building',
-                        points: utmPoints,
-                        tags: element.tags
-                    });
-                } else if (element.tags && element.tags.highway) {
-                    roads.push({
-                        id: generateUUID(),
-                        type: element.tags.highway || 'road',
-                        points: utmPoints,
-                        tags: element.tags
-                    });
-                }
-            }
-        });
-        
-        console.log(`Fetched ${buildings.length} buildings and ${roads.length} roads (for CSV export only)`);
-        
-    } catch (error) {
-        console.error('Error fetching map data:', error);
-        showStatus('init-status', 'Warning: Could not fetch map data. Continuing without external data.', 'error');
-        // Continue without external map data
-    }
 }

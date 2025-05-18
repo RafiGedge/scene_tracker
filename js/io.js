@@ -140,6 +140,23 @@ function objectsToCSV(objects, type) {
     const headers = getCSVHeaders(type);
     let csv = headers.join(',') + '\n';
     
+    // Special handling for Shooting objects
+    if (type === 'Shooting') {
+        for (const obj of Object.values(objects)) {
+            const values = headers.map(header => {
+                const value = obj[header];
+                if (value === undefined || value === null) return '';
+                if (typeof value === 'string' && value.includes(',')) {
+                    return `"${value.replace(/"/g, '""')}"`;
+                }
+                return value;
+            });
+            csv += values.join(',') + '\n';
+        }
+        return csv;
+    }
+    
+    // For other objects with frames
     for (const obj of Object.values(objects)) {
         // For objects with frames, create a row for each frame
         if (obj.frames && obj.frames.length > 0) {
@@ -175,16 +192,14 @@ function objectsToCSV(objects, type) {
     return csv;
 }
 
-
-
-// Get CSV headers for object type - Updated for all associable objects
+// Get CSV headers for object type - Simplified for Shooting objects
 function getCSVHeaders(type) {
     switch (type) {
         case 'Ground': return ['id', 'type', 'callsign', 'x', 'y', 'timestamp'];
-        case 'Shooting': return ['associated_ground_id', 'ground_callsign', 'timestamp', 'launch_location_x', 'launch_location_y', 'original_ground_x', 'original_ground_y', 'target_x', 'target_y', 'ammo_type'];
-        case 'EnemySpot': return ['timestamp', 'x', 'y', 'desc', 'callsign', 'associated_ground_id', 'ground_callsign', 'original_ground_x', 'original_ground_y'];
-        case 'Report': return ['timestamp', 'x', 'y', 'desc', 'callsign', 'associated_ground_id', 'ground_callsign', 'original_ground_x', 'original_ground_y'];
-        case 'Targets': return ['creation_time', 'x', 'y', 'target_type'];
+        case 'Shooting': return ['id', 'associated_ground_id', 'ground_callsign', 'timestamp', 'launch_location_x', 'launch_location_y', 'target_x', 'target_y', 'ammo_type'];
+        case 'EnemySpot': return ['id', 'timestamp', 'x', 'y', 'desc', 'callsign', 'associated_ground_id', 'ground_callsign'];
+        case 'Report': return ['id', 'timestamp', 'x', 'y', 'desc', 'callsign', 'associated_ground_id', 'ground_callsign'];
+        case 'Targets': return ['id', 'creation_time', 'x', 'y', 'target_type'];
         case 'EnemyInfrastructure': return ['id', 'type', 'x', 'y', 'timestamp'];
         default: return [];
     }
@@ -219,8 +234,12 @@ async function loadSelectedFile() {
             throw new Error('Please select a ZIP file.');
         }
         
+        console.log("Loading ZIP file:", file.name);
+        
         const zip = new JSZip();
         const content = await zip.loadAsync(file);
+        
+        console.log("ZIP file loaded, files:", Object.keys(content.files).join(", "));
         
         // Find scene.json (could be in root or subfolder)
         let sceneFile = null;
@@ -241,6 +260,8 @@ async function loadSelectedFile() {
             throw new Error('scene.json not found in the ZIP file.');
         }
         
+        console.log("Found scene.json:", sceneFile.name);
+        
         // Load scene.json
         const sceneContent = await sceneFile.async('string');
         scene = JSON.parse(sceneContent);
@@ -250,6 +271,8 @@ async function loadSelectedFile() {
             throw new Error('Invalid scene.json format.');
         }
         
+        console.log("Scene data loaded:", scene.scene_name);
+        
         // Load building and road data
         buildings = [];
         roads = [];
@@ -258,16 +281,31 @@ async function loadSelectedFile() {
         if (buildingsFile && !buildingsFile.dir) {
             const buildingsCsv = await buildingsFile.async('string');
             buildings = parseBuildingsCSV(buildingsCsv);
+            console.log(`Loaded ${buildings.length} buildings`);
         }
         
         const roadsFile = content.files[(sceneFolder || '') + 'roads.csv'];
         if (roadsFile && !roadsFile.dir) {
             const roadsCsv = await roadsFile.async('string');
             roads = parseRoadsCSV(roadsCsv);
+            console.log(`Loaded ${roads.length} roads`);
         }
         
         // Load object data
         initializeObjects();
+        
+        // Initialize first to make sure the objects property exists
+        if (!objects) {
+            console.error("Objects is undefined after initialization, recreating");
+            objects = {
+                Ground: {},
+                Shooting: {},
+                EnemySpot: {},
+                Report: {},
+                Targets: {},
+                EnemyInfrastructure: {}
+            };
+        }
         
         // Load each object type
         const objectTypes = ['Ground', 'Shooting', 'EnemySpot', 'Report', 'Targets', 'EnemyInfrastructure'];
@@ -275,22 +313,41 @@ async function loadSelectedFile() {
             const fileName = (sceneFolder || '') + objectType.toLowerCase() + '.csv';
             const file = content.files[fileName];
             if (file && !file.dir) {
-                const csvContent = await file.async('string');
-                objects[objectType] = parseObjectCSV(csvContent, objectType);
+                try {
+                    const csvContent = await file.async('string');
+                    console.log(`Loading ${objectType} data from ${fileName}, csv length: ${csvContent.length} bytes`);
+                    
+                    // Special handling for Shooting objects since they don't have frames
+                    if (objectType === 'Shooting') {
+                        objects[objectType] = parseShootingCSV(csvContent);
+                    } else {
+                        objects[objectType] = parseObjectCSV(csvContent, objectType);
+                    }
+                    
+                    console.log(`Loaded ${Object.keys(objects[objectType]).length} ${objectType} objects`);
+                } catch (e) {
+                    console.error(`Error loading ${objectType} data:`, e);
+                    objects[objectType] = {}; // Initialize to empty object in case of error
+                }
+            } else {
+                objects[objectType] = {}; // Initialize to empty if file not found
             }
         }
         
         // Setup scene
         const duration = (scene.end_timestamp - scene.start_timestamp) / 60;
+        console.log("Setting up map with duration:", duration);
         setupMapAndScene(scene.center_lat, scene.center_lon, scene.radius_meters, duration);
         
         // Update timeline
         currentTimestamp = 0;
         const timelineSlider = document.getElementById('timeline-slider');
         timelineSlider.value = 0;
+        console.log("Updating timeline");
         updateTimeline();
         
         showStatus('load-status', 'Scene loaded successfully!', 'success');
+        console.log("Scene loaded successfully");
         setTimeout(() => {
             closeLoadModal();
         }, 1500);
@@ -298,6 +355,93 @@ async function loadSelectedFile() {
     } catch (error) {
         console.error('Load error:', error);
         showStatus('load-status', `Error loading file: ${error.message}`, 'error');
+    }
+}
+
+// Parse Shooting objects CSV - special case since they don't have frames
+function parseShootingCSV(csv) {
+    try {
+        const lines = csv.split('\n').filter(line => line.trim());
+        if (lines.length <= 1) return {};
+        
+        const headers = parseCSVLine(lines[0]);
+        const objects = {};
+        
+        for (let i = 1; i < lines.length; i++) {
+            try {
+                const parts = parseCSVLine(lines[i]);
+                if (parts.length < headers.length) {
+                    console.warn(`Line ${i} has fewer elements than headers: ${parts.length} vs ${headers.length}`);
+                    continue;
+                }
+                
+                const obj = {};
+                
+                // Set default values for required fields
+                obj.target_x = 0;
+                obj.target_y = 0;
+                obj.launch_location_x = 'None';
+                obj.launch_location_y = 'None';
+                obj.ammo_type = 'standard';
+                obj.associated_ground_id = null;
+                obj.ground_callsign = '';
+                obj.timestamp = 0;
+                
+                // Parse values from CSV
+                headers.forEach((header, index) => {
+                    let value = parts[index] || '';
+                    
+                    // Convert numeric fields
+                    if (value && (header.includes('_time') || header === 'timestamp')) {
+                        value = parseInt(value);
+                    } else if (value && (header.includes('_x') || header.includes('_y'))) {
+                        if (value !== 'None') {
+                            value = parseFloat(value);
+                        }
+                    }
+                    
+                    obj[header] = value;
+                });
+                
+                // Get ID from the CSV data or generate one
+                const objId = obj.id || generateUUID();
+                
+                // Ensure obj has no frames property
+                if (obj.frames) delete obj.frames;
+                
+                // Handle backward compatibility with older saved files
+                // If we have original_ground_x/y but no launch_location_x/y
+                if (obj.original_ground_x && obj.original_ground_y && 
+                    (!obj.launch_location_x || obj.launch_location_x === 'None')) {
+                    obj.launch_location_x = obj.original_ground_x;
+                    obj.launch_location_y = obj.original_ground_y;
+                }
+                
+                // Remove deprecated fields
+                if (obj.original_ground_x) delete obj.original_ground_x;
+                if (obj.original_ground_y) delete obj.original_ground_y;
+                
+                // Ensure target_x and target_y are numbers
+                if (obj.target_x && typeof obj.target_x === 'string') {
+                    obj.target_x = parseFloat(obj.target_x);
+                }
+                if (obj.target_y && typeof obj.target_y === 'string') {
+                    obj.target_y = parseFloat(obj.target_y);
+                }
+                
+                // Save the object
+                objects[objId] = obj;
+                
+                console.log(`Loaded Shooting object: ${objId}`, objects[objId]);
+            } catch (e) {
+                console.warn(`Error parsing Shooting CSV line:`, lines[i], e);
+            }
+        }
+        
+        return objects;
+    } catch (error) {
+        console.error("Error in parseShootingCSV:", error);
+        return {}; // Return empty object in case of error
     }
 }
 
@@ -347,7 +491,7 @@ function parseRoadsCSV(csv) {
     return roads;
 }
 
-// Parse object CSV with improved error handling
+// Parse object CSV with improved error handling (for non-Shooting objects)
 function parseObjectCSV(csv, objectType) {
     const lines = csv.split('\n').filter(line => line.trim());
     if (lines.length <= 1) return {};
@@ -371,8 +515,10 @@ function parseObjectCSV(csv, objectType) {
                 obj[header] = value;
             });
             
-            // Group frames by object ID
+            // Get ID from the CSV data or generate one
             const objId = obj.id || generateUUID();
+            
+            // Group frames by object ID
             if (!objects[objId]) {
                 objects[objId] = { ...obj };
                 objects[objId].frames = [];
@@ -386,6 +532,10 @@ function parseObjectCSV(csv, objectType) {
             
             // Add frame data for objects that have timeline data
             if (objectType !== 'Targets' && obj.x !== undefined && obj.y !== undefined && obj.timestamp) {
+                if (!objects[objId].frames) {
+                    objects[objId].frames = [];
+                }
+                
                 objects[objId].frames.push({
                     x: obj.x,
                     y: obj.y,

@@ -3,8 +3,11 @@
 // Add frame at current timestamp
 function addFrame() {
     if (!selectedObject) return;
+    if (selectedObject.type === 'Shooting') return; // Shooting objects don't have frames
     
     const obj = objects[selectedObject.type][selectedObject.id];
+    if (!obj.frames) obj.frames = []; // Ensure frames array exists
+    
     const currentTime = scene.start_timestamp + currentTimestamp;
     
     // Check if frame already exists
@@ -38,8 +41,11 @@ function addFrame() {
 // Delete frame at current timestamp
 function deleteFrame() {
     if (!selectedObject) return;
+    if (selectedObject.type === 'Shooting') return; // Shooting objects don't have frames
     
     const obj = objects[selectedObject.type][selectedObject.id];
+    if (!obj.frames) return; // No frames to delete
+    
     const currentTime = scene.start_timestamp + currentTimestamp;
     
     const frameIndex = obj.frames.findIndex(f => f.timestamp === currentTime);
@@ -86,27 +92,40 @@ function undoLastChange() {
             
         case 'move':
             const obj = objects[lastAction.objectType][lastAction.objectId];
-            const frameIndex = obj.frames.findIndex(f => f.timestamp === lastAction.timestamp);
-            if (frameIndex !== -1) {
-                if (lastAction.oldPosition) {
-                    obj.frames[frameIndex].x = lastAction.oldPosition.x;
-                    obj.frames[frameIndex].y = lastAction.oldPosition.y;
-                } else {
-                    obj.frames.splice(frameIndex, 1);
+            
+            // Special handling for Shooting objects which don't have frames
+            if (lastAction.objectType === 'Shooting') {
+                if (lastAction.key === 'target_x' || lastAction.key === 'target_y') {
+                    obj[lastAction.key] = lastAction.oldValue;
+                }
+            } else {
+                // Handle regular objects with frames
+                if (!obj.frames) obj.frames = [];
+                const frameIndex = obj.frames.findIndex(f => f.timestamp === lastAction.timestamp);
+                if (frameIndex !== -1) {
+                    if (lastAction.oldPosition) {
+                        obj.frames[frameIndex].x = lastAction.oldPosition.x;
+                        obj.frames[frameIndex].y = lastAction.oldPosition.y;
+                    } else {
+                        obj.frames.splice(frameIndex, 1);
+                    }
                 }
             }
             break;
             
         case 'addFrame':
             const addObj = objects[lastAction.objectType][lastAction.objectId];
-            const addFrameIndex = addObj.frames.findIndex(f => f.timestamp === lastAction.timestamp);
-            if (addFrameIndex !== -1) {
-                addObj.frames.splice(addFrameIndex, 1);
+            if (addObj.frames) {
+                const addFrameIndex = addObj.frames.findIndex(f => f.timestamp === lastAction.timestamp);
+                if (addFrameIndex !== -1) {
+                    addObj.frames.splice(addFrameIndex, 1);
+                }
             }
             break;
             
         case 'deleteFrame':
             const delObj = objects[lastAction.objectType][lastAction.objectId];
+            if (!delObj.frames) delObj.frames = [];
             delObj.frames.push(lastAction.frameData);
             break;
             
@@ -129,32 +148,41 @@ function updateFrameList() {
     
     if (!selectedObject) return;
     
+    // Shooting objects don't have frames
+    if (selectedObject.type === 'Shooting') return;
+    
     const obj = objects[selectedObject.type][selectedObject.id];
+    if (!obj) return;
+    
     if (!obj.frames || obj.frames.length === 0) return;
     
     const currentTime = scene.start_timestamp + currentTimestamp;
-    const sortedFrames = obj.frames.sort((a, b) => a.timestamp - b.timestamp);
-    
-    sortedFrames.forEach(frame => {
-        const frameItem = document.createElement('div');
-        frameItem.className = 'frame-item';
-        if (frame.timestamp === currentTime) {
-            frameItem.classList.add('current');
-        }
+    try {
+        const sortedFrames = obj.frames.sort((a, b) => a.timestamp - b.timestamp);
         
-        const timeOffset = frame.timestamp - scene.start_timestamp;
-        const timeStr = formatTime(timeOffset);
-        
-        frameItem.innerHTML = `
-            <span>${timeStr}</span>
-            <span>x: ${frame.x.toFixed(2)}, y: ${frame.y.toFixed(2)}</span>
-        `;
-        
-        frameItem.onclick = () => {
-            document.getElementById('timeline-slider').value = timeOffset;
-            updateTimeline();
-        };
-        
-        frameList.appendChild(frameItem);
-    });
+        sortedFrames.forEach(frame => {
+            const frameItem = document.createElement('div');
+            frameItem.className = 'frame-item';
+            if (frame.timestamp === currentTime) {
+                frameItem.classList.add('current');
+            }
+            
+            const timeOffset = frame.timestamp - scene.start_timestamp;
+            const timeStr = formatTime(timeOffset);
+            
+            frameItem.innerHTML = `
+                <span>${timeStr}</span>
+                <span>x: ${frame.x.toFixed(2)}, y: ${frame.y.toFixed(2)}</span>
+            `;
+            
+            frameItem.onclick = () => {
+                document.getElementById('timeline-slider').value = timeOffset;
+                updateTimeline();
+            };
+            
+            frameList.appendChild(frameItem);
+        });
+    } catch (error) {
+        console.error("Error in updateFrameList:", error, "Object:", obj);
+    }
 }

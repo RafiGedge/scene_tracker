@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addFrame = addFrame;
     window.deleteFrame = deleteFrame;
     window.undoLastChange = undoLastChange;
+    // In main.js, add this to the DOM loaded event handler
+    window.fetchMapData = fetchMapData;
     
     console.log('App initialized, all functions exposed to global scope');
 });

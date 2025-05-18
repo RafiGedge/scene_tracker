@@ -36,6 +36,49 @@ function clearExistingScene() {
     updateObjectsList();
 }
 
+// Setup map and scene
+function setupMapAndScene(centerLat, centerLon, radius, duration) {
+    try {
+        if (map) map.remove();
+        
+        // Validate inputs
+        if (!centerLat || !centerLon || !radius || !duration) {
+            console.error("Invalid parameters for setupMapAndScene:", { centerLat, centerLon, radius, duration });
+            return;
+        }
+        
+        map = L.map('map').setView([centerLat, centerLon], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Add scene boundary circle
+        L.circle([centerLat, centerLon], {
+            color: 'blue',
+            fillColor: '#30f',
+            fillOpacity: 0.1,
+            radius: radius
+        }).addTo(map);
+
+        const timelineSlider = document.getElementById('timeline-slider');
+        timelineSlider.min = 0;
+        timelineSlider.max = duration * 60;
+        timelineSlider.value = 0;
+        currentTimestamp = 0;
+
+        document.getElementById('scene-info').textContent = `Scene: ${scene.scene_name} | Duration: ${duration} min`;
+
+        hasExistingScene = true;
+        map.on('click', handleMapClick);
+        updateMapDisplay();
+        updateObjectsList();
+        
+        console.log("Map and scene setup complete");
+    } catch (error) {
+        console.error("Error in setupMapAndScene:", error);
+    }
+}
+
 // Initialize scene
 async function initializeScene() {
     const statusDiv = document.getElementById('init-status');
@@ -75,5 +118,68 @@ async function initializeScene() {
         
     } catch (error) {
         statusDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+    }
+}
+
+// Fetch building and road data from OpenStreetMap
+// This data is saved to CSV files but NOT rendered on the map
+async function fetchMapData(centerLat, centerLon, radius) {
+    try {
+        const overpassQuery = `
+            [out:json][timeout:25];
+            (
+                way["building"](around:${radius},${centerLat},${centerLon});
+                way["highway"](around:${radius},${centerLat},${centerLon});
+            );
+            (._;>;);
+            out geom;
+        `;
+        
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            body: 'data=' + encodeURIComponent(overpassQuery)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch map data');
+        }
+        
+        const data = await response.json();
+        
+        // Process buildings and roads for CSV export only
+        buildings = [];
+        roads = [];
+        
+        data.elements.forEach(element => {
+            if (element.type === 'way' && element.geometry && element.geometry.length > 1) {
+                const utmPoints = element.geometry.map(point => {
+                    const utm = latLonToUTM(point.lat, point.lon);
+                    return { x: utm.x, y: utm.y };
+                });
+                
+                if (element.tags && element.tags.building) {
+                    buildings.push({
+                        id: generateUUID(),
+                        type: element.tags.building || 'building',
+                        points: utmPoints,
+                        tags: element.tags
+                    });
+                } else if (element.tags && element.tags.highway) {
+                    roads.push({
+                        id: generateUUID(),
+                        type: element.tags.highway || 'road',
+                        points: utmPoints,
+                        tags: element.tags
+                    });
+                }
+            }
+        });
+        
+        console.log(`Fetched ${buildings.length} buildings and ${roads.length} roads (for CSV export only)`);
+        
+    } catch (error) {
+        console.error('Error fetching map data:', error);
+        showStatus('init-status', 'Warning: Could not fetch map data. Continuing without external data.', 'error');
+        // Continue without external map data
     }
 }

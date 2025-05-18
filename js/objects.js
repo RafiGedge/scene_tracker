@@ -1,4 +1,4 @@
-// Object management functions with Ground association for all types
+// Object management functions with modified shooting behavior
 
 // Start adding new object
 function startAddingObject() {
@@ -10,7 +10,7 @@ function startAddingObject() {
 function selectObject(objectType, objectId) {
     selectedObject = { type: objectType, id: objectId };
     document.getElementById('delete-btn').style.display = 'inline-block';
-    document.getElementById('frame-management').style.display = 'block';
+    document.getElementById('frame-management').style.display = objectType !== 'Shooting' ? 'block' : 'none';
     
     // Switch to the correct object type tab
     const tabs = document.querySelectorAll('.object-type-tab');
@@ -91,24 +91,37 @@ function updateObjectPosition(objectType, objectId, latLng) {
 
 // Get object position at specific time
 function getObjectPositionAtTime(obj, timestamp) {
-    if (!obj.frames || obj.frames.length === 0) {
-        if (obj.timestamp && obj.timestamp <= timestamp) {
-            return { x: obj.x, y: obj.y };
+    try {
+        // Special handling for Shooting objects
+        if (obj && obj.target_x !== undefined && obj.target_y !== undefined) {
+            // This is a Shooting object - they don't have frames
+            // Return target position when asked (they don't move)
+            return { x: parseFloat(obj.target_x), y: parseFloat(obj.target_y) };
         }
-        return null;
-    }
-    
-    const sortedFrames = obj.frames.sort((a, b) => a.timestamp - b.timestamp);
-    let lastFrame = null;
-    for (const frame of sortedFrames) {
-        if (frame.timestamp <= timestamp) {
-            lastFrame = frame;
-        } else {
-            break;
+        
+        // For other object types, use frames
+        if (!obj || !obj.frames || obj.frames.length === 0) {
+            if (obj && obj.timestamp && obj.timestamp <= timestamp) {
+                return { x: obj.x, y: obj.y };
+            }
+            return null;
         }
+        
+        const sortedFrames = obj.frames.sort((a, b) => a.timestamp - b.timestamp);
+        let lastFrame = null;
+        for (const frame of sortedFrames) {
+            if (frame.timestamp <= timestamp) {
+                lastFrame = frame;
+            } else {
+                break;
+            }
+        }
+        
+        return lastFrame;
+    } catch (error) {
+        console.error("Error in getObjectPositionAtTime:", error, "Object:", obj);
+        return null; // Return null in case of any error
     }
-    
-    return lastFrame;
 }
 
 // Update objects list
@@ -128,16 +141,21 @@ function updateObjectsList() {
         const nameSpan = document.createElement('span');
         let displayText = '';
         if (obj.callsign) displayText = obj.callsign;
-        else if (obj.ground_callsign) displayText = obj.ground_callsign; // For objects with ground association
+        else if (obj.ground_callsign) displayText = obj.ground_callsign; 
         else if (obj.target_type) displayText = obj.target_type;
         else if (obj.type) displayText = obj.type;
         else displayText = objectId.substring(0, 8);
         nameSpan.textContent = displayText;
         
         const framesCount = document.createElement('span');
-        framesCount.textContent = `(${obj.frames ? obj.frames.length : 1} frames)`;
-        framesCount.style.fontSize = '12px';
-        framesCount.style.color = '#666';
+        if (currentObjectType === 'Shooting') {
+            // For Shooting objects, don't show frames count
+            framesCount.textContent = '';
+        } else {
+            framesCount.textContent = `(${obj.frames ? obj.frames.length : 1} frames)`;
+            framesCount.style.fontSize = '12px';
+            framesCount.style.color = '#666';
+        }
         
         item.appendChild(nameSpan);
         item.appendChild(framesCount);
@@ -211,13 +229,23 @@ function updateObjectProperties() {
         propertiesContainer.appendChild(group);
     });
     
-    // Show current position
-    const position = getObjectPositionAtTime(obj, scene.start_timestamp + currentTimestamp);
-    if (position) {
-        const coordsDiv = document.createElement('div');
-        coordsDiv.className = 'coordinates-display';
-        coordsDiv.textContent = `UTM: ${position.x.toFixed(2)}, ${position.y.toFixed(2)}`;
-        propertiesContainer.appendChild(coordsDiv);
+    // Show current position for non-Shooting objects
+    if (selectedObject.type !== 'Shooting') {
+        const position = getObjectPositionAtTime(obj, scene.start_timestamp + currentTimestamp);
+        if (position) {
+            const coordsDiv = document.createElement('div');
+            coordsDiv.className = 'coordinates-display';
+            coordsDiv.textContent = `UTM: ${position.x.toFixed(2)}, ${position.y.toFixed(2)}`;
+            propertiesContainer.appendChild(coordsDiv);
+        }
+    } else {
+        // For Shooting objects, show target coordinates
+        if (obj.target_x && obj.target_y) {
+            const coordsDiv = document.createElement('div');
+            coordsDiv.className = 'coordinates-display';
+            coordsDiv.textContent = `Target UTM: ${parseFloat(obj.target_x).toFixed(2)}, ${parseFloat(obj.target_y).toFixed(2)}`;
+            propertiesContainer.appendChild(coordsDiv);
+        }
     }
 }
 
@@ -232,7 +260,7 @@ function isPositionInScene(x, y) {
     return distance <= scene.radius_meters;
 }
 
-// Update any object with Ground object information - generalized function
+// Update any object with Ground object information - simplified for Shooting objects
 function updateWithGroundObject(objectType, fieldKey, groundObjectId) {
     if (!selectedObject) return;
     
@@ -243,12 +271,10 @@ function updateWithGroundObject(objectType, fieldKey, groundObjectId) {
         obj.associated_ground_id = null;
         obj.ground_callsign = '';
         
-        // Specific to Shooting objects
+        // For Shooting objects, clear launch location too
         if (objectType === 'Shooting') {
             obj.launch_location_x = 'None';
             obj.launch_location_y = 'None';
-            obj.original_ground_x = null;
-            obj.original_ground_y = null;
         }
     } else {
         const groundObj = objects.Ground[groundObjectId];
@@ -262,38 +288,22 @@ function updateWithGroundObject(objectType, fieldKey, groundObjectId) {
                 obj.associated_ground_id = groundObjectId;
                 obj.ground_callsign = groundObj.callsign || 'Unknown';
                 
-                // Specific to Shooting objects
+                // For Shooting objects, set launch location to current ground position
                 if (objectType === 'Shooting') {
                     obj.launch_location_x = groundPosition.x;
                     obj.launch_location_y = groundPosition.y;
-                    
-                    // Store the original ground position when association is made
-                    obj.original_ground_x = groundPosition.x;
-                    obj.original_ground_y = groundPosition.y;
-                }
-                
-                // Store original position for EnemySpot and Report objects too
-                if (objectType === 'EnemySpot' || objectType === 'Report') {
-                    obj.original_ground_x = groundPosition.x;
-                    obj.original_ground_y = groundPosition.y;
+                    // Also record creation timestamp
+                    obj.timestamp = currentTime;
                 }
             } else {
-                // Out of scene or no position - set to None
+                // Out of scene or no position
                 obj.associated_ground_id = groundObjectId; // Keep the association
                 obj.ground_callsign = groundObj.callsign || 'Unknown';
                 
-                // Specific to Shooting objects
+                // For Shooting objects - set to None if position not available
                 if (objectType === 'Shooting') {
                     obj.launch_location_x = 'None';
                     obj.launch_location_y = 'None';
-                    obj.original_ground_x = null;
-                    obj.original_ground_y = null;
-                }
-                
-                // Clear original position for EnemySpot and Report objects too
-                if (objectType === 'EnemySpot' || objectType === 'Report') {
-                    obj.original_ground_x = null;
-                    obj.original_ground_y = null;
                 }
             }
         }
@@ -304,7 +314,7 @@ function updateWithGroundObject(objectType, fieldKey, groundObjectId) {
     updateMapDisplay();
 }
 
-// Get fields for object type - with Ground association for EnemySpot and Report
+// Get fields for object type - simplified for Shooting objects
 function getFieldsForObjectType(objectType) {
     switch (objectType) {
         case 'Ground': return [
@@ -360,4 +370,9 @@ function updateObjectProperty(key, value) {
     
     obj[key] = value;
     updateObjectsList();
+    
+    // Update map display if we changed target coordinates for a Shooting object
+    if (selectedObject.type === 'Shooting' && (key === 'target_x' || key === 'target_y')) {
+        updateMapDisplay();
+    }
 }
