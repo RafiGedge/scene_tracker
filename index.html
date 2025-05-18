@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Timeline Tracker - Professional Edition</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="setup-modal" class="hidden">
+        <div id="setup-modal-content">
+            <h2>Scene Setup</h2>
+            <div class="form-group">
+                <label for="scene-name">Scene Name:</label>
+                <input type="text" id="scene-name" value="training_ground_01">
+            </div>
+            <div class="form-group">
+                <label for="center-lat">Center Latitude:</label>
+                <input type="number" id="center-lat" step="0.0001" value="32.0853">
+            </div>
+            <div class="form-group">
+                <label for="center-lon">Center Longitude:</label>
+                <input type="number" id="center-lon" step="0.0001" value="34.7818">
+            </div>
+            <div class="form-group">
+                <label for="radius">Radius (meters):</label>
+                <input type="number" id="radius" value="20">
+            </div>
+            <div class="form-group">
+                <label for="duration">Duration (minutes):</label>
+                <input type="number" id="duration" value="1">
+            </div>
+            <button class="button" onclick="initializeScene()">Initialize Scene</button>
+            <div id="init-status"></div>
+        </div>
+    </div>
+
+    <div id="header">
+        <button class="button" onclick="createNewScene()">New Scene</button>
+        <button class="button" onclick="saveScene()">Save Scene</button>
+        <button class="button" onclick="downloadScene()">Download ZIP</button>
+        <button class="button" onclick="showLoadOptions()">Load Scene</button>
+        <button class="button danger" onclick="deleteObject()" style="display: none;" id="delete-btn">Delete Object</button>
+        <span id="scene-info"></span>
+    </div>
+
+    <div id="load-modal" class="hidden">
+        <div class="modal-content">
+            <h3>Load Scene</h3>
+            <p>Upload a ZIP file containing scene data:</p>
+            <input type="file" id="zip-file-input" accept=".zip">
+            <div class="load-controls">
+                <button class="button" onclick="loadSelectedFile()">Load</button>
+                <button class="button secondary" onclick="closeLoadModal()">Cancel</button>
+            </div>
+            <div id="load-status"></div>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div id="map"></div>
+        <div id="sidebar">
+            <div class="object-type-tabs" id="object-type-tabs">
+                <div class="object-type-tab active" data-type="Ground">Ground</div>
+                <div class="object-type-tab" data-type="Shooting">Shooting</div>
+                <div class="object-type-tab" data-type="EnemySpot">Enemy Spot</div>
+                <div class="object-type-tab" data-type="Report">Report</div>
+                <div class="object-type-tab" data-type="Targets">Targets</div>
+                <div class="object-type-tab" data-type="EnemyInfrastructure">Enemy Infrastructure</div>
+            </div>
+            
+            <h3>Object Editor</h3>
+            <button class="button" onclick="startAddingObject()">New Object</button>
+            
+            <div id="object-properties"></div>
+            
+            <div id="frame-management" style="display: none;">
+                <h4>Frames</h4>
+                <div class="frame-list" id="frame-list"></div>
+                <div style="display: flex; gap: 5px; margin-top: 10px;">
+                    <button class="button small" onclick="addFrame()">Add Frame</button>
+                    <button class="button small" onclick="deleteFrame()">Delete Frame</button>
+                    <button class="button small" onclick="undoLastChange()">Undo</button>
+                </div>
+            </div>
+            
+            <div class="object-list" id="objects-list"></div>
+        </div>
+    </div>
+
+    <div id="timeline-container">
+        <div style="display: flex; align-items: center;">
+            <span>Timeline:</span>
+            <span id="current-time">00:00:00</span>
+        </div>
+        <input type="range" id="timeline-slider" min="0" max="3600" value="0" step="1">
+        <div class="timeline-controls">
+            <button class="button" onclick="playPause()">Play</button>
+            <button class="button" onclick="resetTimeline()">Reset</button>
+            <div class="speed-control">
+                Speed: 
+                <select id="playback-speed">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="5">5x</option>
+                    <option value="10">10x</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="js/globals.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/scene.js"></script>
+    <script src="js/objects.js"></script>
+    <script src="js/timeline.js"></script>
+    <script src="js/frames.js"></script>
+    <script src="js/io.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
